@@ -20,7 +20,7 @@ Takes too long, especially when too few CPU cores.
 Unfinished because takes too long to execute,
 longer than Monte Carlo.
 Could be optimized.
-Could be done with threads and recursion.
+Could be done with multiple threads.
 
 Solution 4: Dara Pipeline Planning BFS.py
 
