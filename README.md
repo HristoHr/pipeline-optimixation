@@ -2,7 +2,7 @@ Solution 1: Data Pipeline Optimization.py
 
 Prioritizes tasks that have the highest importance and the longest amount of time. (importance is the sum of minutes of dependent tasks) 
 Yields a minimum time path for the short and big pipeline.
-Writes the path into a file
+Writes the path into a file.
 
 Solution 2: Data Pipeline Planning Monte Carlo.py
 
