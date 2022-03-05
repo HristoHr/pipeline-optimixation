@@ -1,10 +1,76 @@
 from itertools import islice, combinations
 import sys
-import cpu
-import core
-from path import Path
-from task import Task
 
+class Path:
+    def __init__(self, tasks):
+        self.tasks = tasks
+        tasks_minutes_sum = 0
+        for task in tasks:
+            tasks_minutes_sum += task.minutes
+        self.path_length = tasks_minutes_sum
+        self.path_str = self.to_string()
+
+    def to_string(self):
+        path_string = ''
+        for task in self.tasks:
+            path_string += task.name + ','
+        return path_string[:-1]
+
+class Task:
+    def __init__(self, name, minutes, group=None, dep=[]):
+        self.name = name
+        self.minutes = minutes
+        self.group = group
+        self.dep = []
+        # self.inv_dep = []
+
+    def set_dep(self, dep):
+        self.dep = dep
+
+    def get_dep_time(self):
+        if self.dep is None:
+            return 0
+        dep_time = 0
+        for t in self.dep:
+            dep_time += t.minutes
+        return dep_time
+
+
+class Core:
+    def __init__(self, current_task=None):
+        self.current_task = current_task
+
+    def is_idle(self):
+        return self.current_task is None or self.current_task.minutes == 0
+
+
+class CPU:
+    def __init__(self, cores):
+        self.cores = cores
+
+    def get_current_tasks(self):
+        current_tasks = []
+        for c in self.cores:
+            if not c.is_idle():
+                current_tasks.append(c.current_task)
+        return current_tasks
+
+    def get_idle_core(self):
+        for c in self.cores:
+            if c.is_idle():
+                return c
+
+    def load_idle_cores(self, tasks):
+        for task in tasks:
+            if (self.get_idle_core() is not None) and (task not in self.get_current_tasks()):
+                self.get_idle_core().current_task = task
+
+    def get_idle_cores(self):
+        idle_cores = []
+        for c in self.cores:
+            if c.is_idle():
+                idle_cores.append(c)
+        return idle_cores
 
 def find_task_by_name(t_list, t_name):
     for t in t_list:
