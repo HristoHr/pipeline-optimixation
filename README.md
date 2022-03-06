@@ -1,6 +1,6 @@
 Solution 1: Data Pipeline Prioritization.py
 
-Prioritizes tasks that have the highest importance and the longest amount of time. (importance is the sum of minutes of dependent tasks) 
+Prioritizes tasks that have the highest importance and the longest amount of time. (Importance is the sum of minutes left of dependent tasks.) 
 Yields a minimum time path for the short and big pipeline.
 Most efficient solution of all.
 
@@ -17,7 +17,7 @@ When a CPU core is idle find all possible combinations of idle CPU cores and tas
 When more than one combination is available the first combination of tasks is loaded into the CPU the rest of the combinations are saved into a list HistoryState objects.
 The HistoryState preserves the current state of the execution with another option of tasks loaded into the CPU cores.
 This way all possible combinations of all possible pipeline paths are simulated.
-Takes too long, especially when too few CPU cores.
+Takes long when too few CPU cores.
 (Tried to optimize it with multithreading. However since its Python it actually took longer to run.)
 
 Solution 4: Data Pipeline Planning BFS.py (Unfinished)
