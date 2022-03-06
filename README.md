@@ -1,6 +1,6 @@
 Solution 1: Data Pipeline Prioritization.py
 
-Prioritizes tasks that have the highest importance and the longest amount of time. (Importance is the sum of minutes left of dependent tasks from the same group.) 
+Prioritizes tasks that have the highest importance and the longest amount of time. (Importance is the sum of minutes left of dependent tasks from the same group + tasks without a group.) 
 Yields a minimum time path for the short and big pipeline.
 Most efficient solution of all.
 
