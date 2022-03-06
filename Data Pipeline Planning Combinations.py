@@ -20,17 +20,6 @@ class Task:
     def set_dep(self, dep):
         self.dep = dep
 
-    #
-    # def set_inv_dep(self, inv_dep):
-    #     self.inv_dep = inv_dep
-    #
-    # def importance_score(self, group):
-    #     score = 0
-    #     for t in self.inv_dep:
-    #         if t in group:
-    #             score += t.minutes
-    #     return score
-
     def get_dep_time(self):
         if self.dep is None:
             return 0
@@ -76,28 +65,16 @@ class CPU:
                 idle_cores.append(c)
         return idle_cores
 
+    def get_time_to_idle_core(self):
+        current_tasks = self.get_current_tasks()
+        current_tasks.sort(key=lambda x: x.minutes, reverse=False)
+        return current_tasks[0].minutes
+
 
 def find_task_by_name(t_list, t_name):
     for t in t_list:
         if t.name == t_name:
             return t
-
-
-def optimal_task(grouped_tasks, processing_tasks):
-    tasks = list(set(grouped_tasks).difference(set(processing_tasks)))
-    # tasks.sort(key=lambda x: x.minutes, reverse=False)
-    # tasks.sort(key=lambda x: x.minutes, reverse=True)
-    # tasks.sort(key=lambda x: x.importance_score(grouped_tasks), reverse=True)
-    options = []
-    for t in tasks:
-        if t.get_dep_time() == 0:
-            options.append(t)
-    # if len(options) > 1:
-    #     for option in options:
-    #         print(option.name,end=",")
-    #     print()
-    if len(options) >= 1:
-        return random.choice(options)
 
 
 num_cores = 3
@@ -108,9 +85,7 @@ for arg in sys.argv:
     elif "--pipeline=" in arg:
         read_file = arg.split('=')[1]
 
-result_list = []
-
-
+execution_history_map = {}
 def set_tasks():
     task_list = []
     task_dep_dict = {}
@@ -162,9 +137,9 @@ def flatten_dict(dict):
     return flat_list
 
 
-def get_task_names(task_list):
+def get_task_names(tasks):
     task_names = []
-    for task in task_list:
+    for task in tasks:
         task_names.append(task.name)
     return task_names
 
@@ -187,135 +162,146 @@ for init_task_option in (groups_dict['raw'] + groups_dict['no_group']):
 
 
 class HistoricalState:
-    def __init__(self, cpu_task, groups_state, core_task_combo, history):
-        cpu_task_names = get_task_names(cpu_task)
+    def __init__(self, clock, cpu, groups_dict, core_task_combo, history):
+        cpu_task_names = get_task_names(cpu)
         combo_task_names = get_task_names(core_task_combo)
-        task_list_flat = flatten_dict(groups_state)
+        task_list_flat = flatten_dict(groups_dict)
+
         core_list = []
         for i in range(num_cores):
             core_list.append(Core())
-        self.cpu_state = CPU(core_list)
+        self.cpu = CPU(core_list)
 
         for cpu_task_name in cpu_task_names:
             task_found = find_task_by_name(task_list_flat, cpu_task_name)
-            if task_found not in self.cpu_state.get_current_tasks():
-                if self.cpu_state.get_idle_core() is not None:
-                    self.cpu_state.get_idle_core().current_task = task_found
+            if task_found not in self.cpu.get_current_tasks():
+                if self.cpu.get_idle_core() is not None:
+                    self.cpu.get_idle_core().current_task = task_found
 
         for combo_task_name in combo_task_names:
             task_found = find_task_by_name(task_list_flat, combo_task_name)
-            if task_found not in self.cpu_state.get_current_tasks():
-                if self.cpu_state.get_idle_core() is not None:
-                    self.cpu_state.get_idle_core().current_task = task_found
+            if task_found not in self.cpu.get_current_tasks():
+                if self.cpu.get_idle_core() is not None:
+                    self.cpu.get_idle_core().current_task = task_found
 
         self.history = history
-        self.groups_state = groups_state
+        self.groups_dict = groups_dict
+        self.clock = clock
 
-    def get_execution_time(self):
-        return len(self.history) + 1
+    # def get_execution_time(self):
+    #     return len(self.history) + 1
 
 
-historical_state_list = []
-execution_history_list = []
-for task_comb in combinations(init_task_options, num_cores):
+def get_options(tasks, cpu_current_tasks):
+    unprocessed_tasks = list(set(tasks).difference(set(cpu_current_tasks)))
+    options = []
+    for ut in unprocessed_tasks:
+        if ut.get_dep_time() == 0:
+            options.append(ut)
+    return options
 
-    task_list_copy = copy.deepcopy(task_list)
-    groups_dict_copy = set_task_dict(task_list_copy)
-    core_list = []
-    execution_history = []
-    for init_task_name in task_comb:
-        core_list.append(Core(find_task_by_name(task_list_copy, init_task_name)))
 
-    cpu = CPU(core_list)
-    for state_group_name, state_group_tasks in groups_dict_copy.items():
-        while len(state_group_tasks) > 0:
+def get_core_task_combos(options, cpu):
+    if len(set(options)) != len(options):
+        return list(combinations(get_combo_options(options), len(cpu.get_idle_cores())))
+    else:
+        return list(combinations(options, len(cpu.get_idle_cores())))
+
+
+def get_combo_options(options):
+    minutes_dict = {}
+    for option in options:
+        minutes_dict[option.minutes] = option
+    return list(minutes_dict.values())
+
+
+def pipeline_execution(clock, groups_dict, cpu, historical_state_list, execution_history, min_result=None):
+    for group_name, group_tasks in groups_dict.items():
+        while len(group_tasks) > 0:
             if len(cpu.get_idle_cores()) > 0:
-                unprocessed_tasks = list(
-                    set(state_group_tasks + groups_dict_copy['no_group']).difference(set(cpu.get_current_tasks())))
-                options = []
-                for ut in unprocessed_tasks:
-                    if ut.get_dep_time() == 0:
-                        options.append(ut)
+                options = get_options(group_tasks + groups_dict['no_group'], cpu.get_current_tasks())
                 if len(options) >= len(cpu.get_idle_cores()):
-                    core_task_combos = list(combinations(options, len(cpu.get_idle_cores())))
+
+                    core_task_combos = get_core_task_combos(options, cpu)
                     if len(core_task_combos) > 0:
                         for i in range(1, len(core_task_combos)):
-                            hist_state = HistoricalState(cpu.get_current_tasks(),
-                                                         copy.deepcopy(groups_dict_copy),
+                            hist_state = HistoricalState(clock,
+                                                         cpu.get_current_tasks(),
+                                                         copy.deepcopy(groups_dict),
                                                          core_task_combos[i],
                                                          copy.deepcopy(execution_history))
                             historical_state_list.append(hist_state)
                         cpu.load_idle_cores(list(core_task_combos[0]))
                 else:
                     cpu.load_idle_cores(options)
+
+            minutes_to_idle_core = cpu.get_time_to_idle_core()
+            clock += minutes_to_idle_core
+
+            if min_result is not None and clock >= min_result:
+                return
+
             current_task_names = []
             for current_task in cpu.get_current_tasks():
                 current_task_names.append(current_task.name)
-                current_task.minutes = current_task.minutes - 1
+                current_task.minutes -= minutes_to_idle_core
                 if current_task.minutes == 0:
-                    if current_task in state_group_tasks:
-                        state_group_tasks.remove(current_task)
-                    elif current_task in groups_dict_copy['no_group']:
-                        groups_dict_copy['no_group'].remove(current_task)
-            current_task_names.sort()
-            # print(execution_history)
+                    if current_task in group_tasks:
+                        group_tasks.remove(current_task)
+                    elif current_task in groups_dict['no_group']:
+                        groups_dict['no_group'].remove(current_task)
             execution_history.append(current_task_names)
+    execution_history_map[clock] = execution_history
 
-    result_list.append(len(execution_history))
-    execution_history_list.append(execution_history)
+
+historical_state_list = []
+combo_size = len(init_task_options) if num_cores >= len(init_task_options)-1 else num_cores
+for task_comb in combinations(init_task_options, combo_size):
+    task_list_copy = copy.deepcopy(task_list)
+    core_list = []
+
+    for init_task_name in task_comb:
+        core_list.append(Core(find_task_by_name(task_list_copy, init_task_name)))
+
+    groups_dict = set_task_dict(task_list_copy)
+    cpu = CPU(core_list)
+    min_execution = np.min(list(execution_history_map.keys())) if len(execution_history_map.keys()) > 0 else None
+    pipeline_execution(0, groups_dict, cpu, historical_state_list, [], min_execution)
 
 for historical_state in historical_state_list:
-    groups_state = historical_state.groups_state
-    if len(historical_state.history) >= np.min(result_list):
-        #print('too long 1')
-        break
-    for state_group_name, state_group_tasks in groups_state.items():
-        while len(state_group_tasks) > 0:
-            if len(historical_state.cpu_state.get_idle_cores()) > 0:
-                unprocessed_tasks = list(
-                    set(state_group_tasks + groups_state['no_group']).difference(
-                        set(historical_state.cpu_state.get_current_tasks())))
-                options = []
-                for ut in unprocessed_tasks:
-                    if ut.get_dep_time() == 0:
-                        options.append(ut)
+    min_execution = np.min(list(execution_history_map.keys())) if len(execution_history_map.keys()) > 0 else None
+    pipeline_execution(historical_state.clock, historical_state.groups_dict, historical_state.cpu, historical_state_list,
+                       historical_state.history, min_execution)
 
-                if len(options) >= len(historical_state.cpu_state.get_idle_cores()):
-                    core_task_combos = list(combinations(options, len(historical_state.cpu_state.get_idle_cores())))
-                    if len(core_task_combos) > 0:
-                        if historical_state.history not in historical_state_list:
-                            for i in range(1, len(core_task_combos)):
-                                hist_state = HistoricalState(historical_state.cpu_state.get_current_tasks(),
-                                                             copy.deepcopy(groups_state),
-                                                             core_task_combos[i],
-                                                             copy.deepcopy(historical_state.history))
-                                historical_state_list.append(hist_state)
-                            historical_state.cpu_state.load_idle_cores(list(core_task_combos[0]))
-                        else:
-                            print("Duplicate")
-                else:
-                    historical_state.cpu_state.load_idle_cores(options)
-            current_task_names = []
-            for ct in historical_state.cpu_state.get_current_tasks():
-                current_task_names.append(ct.name)
-                ct.minutes = ct.minutes - 1
-                if ct.minutes == 0:
-                    if ct in state_group_tasks:
-                        state_group_tasks.remove(ct)
-                    elif ct in groups_state['no_group']:
-                        groups_state['no_group'].remove(ct)
-            current_task_names.sort()
-            historical_state.history.append(current_task_names)
+min_execution = np.min(list(execution_history_map.keys())) if len(execution_history_map.keys()) > 0 else None
+if min_execution is not None:
+    tasks_order = []
+    for task_names in execution_history_map[min_execution]:
+        executed_tasks = []
+        for task_name in task_names:
+            executed_tasks.append(find_task_by_name(task_list, task_name))
+        tasks_order.append(executed_tasks)
+    output_file_name = "output.txt"
+    f = open(output_file_name, "a")
+    f.write("| Time    | Tasks being Executed | Group Name\n")
+    f.write("| ------- | -------------------- | ----------\n")
 
-            if len(historical_state.history) >= np.min(result_list):
-                #print('too long 2')
-                break
-        if len(historical_state.history) >= np.min(result_list):
-            #print('too long 3')
-            break
-    if len(historical_state.history) < np.min(result_list):
-        #print(len(historical_state.history))
-        result_list.append(len(historical_state.history))
-        execution_history_list.append(historical_state.history)
-        # print(historical_state.history)
-print('Minimum Execution : ', np.min(result_list))
+    counter = 0
+    for tasks in tasks_order:
+        shortest_task_minutes = sorted(tasks, key=lambda x: x.minutes, reverse=False)[0].minutes
+        tasks_names_str = ''
+        tasks_group_str = ''
+
+        for task in tasks:
+            tasks_names_str += task.name + ','
+            if task.group != 'no_group':
+                tasks_group_str = task.group
+
+        for i in range(shortest_task_minutes):
+            counter += 1
+            f.write('|' + str(counter) + (9 - len(str(counter))) * ' ' + '|' + tasks_names_str[:-1] + (
+                        23 - len(tasks_names_str)) * ' ' + '| ' + tasks_group_str + '\n')
+
+        for task in tasks:
+            task.minutes -= shortest_task_minutes
+    print('Minimum Execution : ', np.min(min_execution))

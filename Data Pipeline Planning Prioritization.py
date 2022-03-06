@@ -48,9 +48,11 @@ class CPU:
         return current_tasks
 
     def get_idle_cores(self):
-        for c in core_list:
+        idle_cores = []
+        for c in self.cores:
             if c.is_idle():
-                return c
+                idle_cores.append(c)
+        return idle_cores
 
 
 def find_task_by_name(t_list, t_name):
@@ -62,8 +64,8 @@ def find_task_by_name(t_list, t_name):
 from itertools import islice
 import sys
 
-num_cores = 3
-read_file = 'pipeline_test.txt'
+num_cores = 2
+read_file = 'pipeline_big.txt'
 for arg in sys.argv:
     if "--cpu_cores=" in arg:
         num_cores = int(arg.split('=')[1])
@@ -109,7 +111,7 @@ for task, dep_names in task_dep_dict.items():
         inverted_task_dep_dict.setdefault(find_task_by_name(task_list, task_name), []).append(task)
 
 for task, inv_dep_tasks in inverted_task_dep_dict.items():
-    task.set_children(inv_dep_tasks)
+    task.set_inv_dep(inv_dep_tasks)
 
 groups_dict = {'raw': [], 'feature': [], 'model': [], 'meta_models': [], 'no_group': []}
 no_group = []
@@ -151,14 +153,13 @@ for group_name, group_tasks in groups_dict.items():
         counter_str = str(counter)
         f.write('|' + counter_str + (9 - len(counter_str)) * ' ' + '|')
         # print('|' + counter_str + (9 - len(counter_str)) * ' ' + '|')
-        for core in cpu.cores:
-            if core.is_idle():
-                opt_task = optimal_task(group_tasks + groups_dict['no_group'], cpu.get_current_tasks())
-                if opt_task is None:
-                    opt_task = optimal_task(groups_dict['no_group'], cpu.get_current_tasks())
-                if opt_task is None:
-                    continue
-                core.current_task = opt_task
+        for core in cpu.get_idle_cores():
+            opt_task = optimal_task(group_tasks + groups_dict['no_group'], cpu.get_current_tasks())
+            if opt_task is None:
+                opt_task = optimal_task(groups_dict['no_group'], cpu.get_current_tasks())
+            if opt_task is None:
+                continue
+            core.current_task = opt_task
         str_tasks = ''
         for current_task in cpu.get_current_tasks():
             current_task.minutes = current_task.minutes - 1
