@@ -22,7 +22,8 @@ Takes too long, especially when too few CPU cores.
 
 Solution 4: Data Pipeline Planning BFS.py (Unfinished)
 
-Attempt to use Breadth First Search.  
+Attempt to use Breadth First Search.
+The idea was to combination of possible paths(object that contains list of Taks) to load into a cou core when it is avalable.
 Coundn't figure it out.
 Works only on pipeline_small.txt
 
