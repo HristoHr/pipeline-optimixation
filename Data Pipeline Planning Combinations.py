@@ -262,14 +262,26 @@ def pipeline_execution(clock, groups_dict, cpu, historical_state_list, execution
 
 
 historical_state_list = []
+start_time = time.time()
 combo_size = len(init_task_options) if num_cores >= len(init_task_options) - 1 else num_cores
+combinations_times_combo_map = {}
+
+# Filter out combinations that are equivalent.
+# Hence, combinations that have same task times.
+for t_comb in combinations(init_task_options, combo_size):
+    minutes_list = []
+    for t_name in t_comb:
+        t = find_task_by_name_in_task_list(task_list, t_name)
+        minutes_list.append(t.minutes)
+    minutes_list.sort()
+    combinations_times_combo_map[str(minutes_list)] = t_comb
 
 # Loop through all core task combinations
-for task_comb in combinations(init_task_options, combo_size):
+for task_combo in list(combinations_times_combo_map.values()):
     task_list_copy = copy.deepcopy(task_list)
     core_list = []
 
-    for init_task_name in task_comb:
+    for init_task_name in task_combo:
         core_list.append(Core(find_task_by_name_in_task_list(task_list_copy, init_task_name)))
 
     groups_dict = set_task_dict(task_list_copy)
