@@ -6,12 +6,15 @@ class Task:
         self.dep = []
         self.inv_dep = []
 
+    # Set Children
     def set_dep(self, dep):
         self.dep = dep
 
+    # Set Parents
     def set_inv_dep(self, inv_dep):
         self.inv_dep = inv_dep
 
+    # Importance is the sum of minutes of all dependent tasks in a group.
     def importance_score(self, group):
         score = 0
         for t in self.inv_dep:
@@ -19,6 +22,7 @@ class Task:
                 score += t.minutes
         return score
 
+    # Get sum of time of all dependent tasks.
     def get_dep_time(self):
         if self.dep is None:
             return 0
@@ -65,7 +69,8 @@ from itertools import islice
 import sys
 
 num_cores = 2
-read_file = 'pipeline_big.txt'
+read_file = 'pipeline_small.txt'
+
 for arg in sys.argv:
     if "--cpu_cores=" in arg:
         num_cores = int(arg.split('=')[1])
@@ -73,9 +78,10 @@ for arg in sys.argv:
         read_file = arg.split('=')[1]
 
 result_list = []
-# for i in range(1):
 task_list = []
 task_dep_dict = {}
+
+# Read and parse file 4 lines at a time
 with open(read_file, 'r') as f:
     while True:
         next_n_lines = list(islice(f, 4))
@@ -90,11 +96,13 @@ with open(read_file, 'r') as f:
         dep_str = next_n_lines[3].strip()
         dep_names = None if next_n_lines[3].strip() == '' else dep_str.split(',')
 
+        #Create tasks
         task = Task(name, minutes, group)
         task_list.append(task)
 
         task_dep_dict[task] = dep_names
 
+# Set dependent (children) tasks
 for task, dep_names in task_dep_dict.items():
     if dep_names is None:
         continue
@@ -103,6 +111,7 @@ for task, dep_names in task_dep_dict.items():
         dep_tasks.append(find_task_by_name(task_list, dep_name))
     task.set_dep(dep_tasks)
 
+# Set invert dependent (parent) tasks
 inverted_task_dep_dict = {}
 for task, dep_names in task_dep_dict.items():
     if dep_names is None:
@@ -113,6 +122,7 @@ for task, dep_names in task_dep_dict.items():
 for task, inv_dep_tasks in inverted_task_dep_dict.items():
     task.set_inv_dep(inv_dep_tasks)
 
+# Set task groups
 groups_dict = {'raw': [], 'feature': [], 'model': [], 'meta_models': [], 'no_group': []}
 no_group = []
 for task in task_list:
@@ -122,13 +132,11 @@ for task in task_list:
         groups_dict[task.group].append(task)
 
 
+# Optimal task is the tasks that is not currently being processed
+# with dependency time of 0 and highest importance score and longest computation time.
 def optimal_task(grouped_tasks, processing_tasks):
     tasks = list(set(grouped_tasks).difference(set(processing_tasks)))
-    # tasks.sort(key=lambda x: x.minutes, reverse=False)
-    # tasks.sort(key=lambda x: x.minutes, reverse=True)
     tasks.sort(key=lambda x: (x.importance_score(grouped_tasks), x.minutes), reverse=True)
-
-    # random.shuffle(tasks)
     for t in tasks:
         if t.get_dep_time() == 0:
             return t
@@ -138,32 +146,37 @@ counter = 0
 counter_str = ''
 core_list = []
 
+#Fill CPU with empty cores
 for core in range(num_cores):
     core_list.append(Core())
 
 cpu = CPU(core_list)
+
+
 output_file_name = "output.txt"
 f = open(output_file_name, "a")
 f.write("| Time    | Tasks being Executed | Group Name\n")
 f.write("| ------- | -------------------- | ----------\n")
 
+#Go through all goroups in order.
 for group_name, group_tasks in groups_dict.items():
     while len(group_tasks) > 0:
         counter += 1
         counter_str = str(counter)
         f.write('|' + counter_str + (9 - len(counter_str)) * ' ' + '|')
-        # print('|' + counter_str + (9 - len(counter_str)) * ' ' + '|')
+        #Loop through all idle cores
         for core in cpu.get_idle_cores():
+            #Select optimal task form task's group + tasks that have no group.
             opt_task = optimal_task(group_tasks + groups_dict['no_group'], cpu.get_current_tasks())
-            if opt_task is None:
-                opt_task = optimal_task(groups_dict['no_group'], cpu.get_current_tasks())
             if opt_task is None:
                 continue
             core.current_task = opt_task
         str_tasks = ''
+        #Decrement time of currently processed tasks
         for current_task in cpu.get_current_tasks():
-            current_task.minutes = current_task.minutes - 1
+            current_task.minutes -= 1
             str_tasks += current_task.name + ','
+            #remove tasks from group when processing time left is 0
             if current_task.minutes == 0:
                 if current_task in group_tasks:
                     group_tasks.remove(current_task)
@@ -174,10 +187,4 @@ for group_name, group_tasks in groups_dict.items():
         f.write(str_tasks.rstrip(',') + (23 - len(str_tasks)) * ' ' + '| ' + group_name_str)
 
 print('Minimum Execution Time = ' + str(counter) + ' minutes')
-
-# print(str(counter) + ' | ' + str_tasks + '| ' + group_name_str)
-
 f.close()
-# os.rename('output.txt', counter_str+'.txt')
-
-# print('Maximum Execution Time = ' + str(np.max(result_list)) + ' minutes')
