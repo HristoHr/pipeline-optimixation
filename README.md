@@ -13,10 +13,10 @@ Can't be 100% the one is goint to get the most optimal solution.
 
 Solution 3: Data Pipeline Planning Combinations.py
 
-When a CPU core is idle find all possible combinations of idle CPU cores and tasks that are ready to execute. 
+When a CPU core is idle find all possible combinations of idle CPU cores and tasks that are ready to execute filtering out combinations that are equivelent). 
 When more than one combination is available the first combination of tasks is loaded into the CPU the rest of the combinations are saved into a list HistoryState objects.
 The HistoryState preserves the current state of the execution with another option of tasks loaded into the CPU cores.
-This way all possible combinations of all possible pipeline paths are simulated.
+This way all different combinations of all possible pipeline paths are simulated.
 Takes long when too few CPU cores.
 (Tried to optimize it with multithreading. However since its Python it actually took longer to run.)
 
@@ -26,9 +26,6 @@ Attempt to use Breadth First Search.
 The idea was to combination of possible paths(object that contains list of Taks) to load into a cou core when it is avalable.
 Coundn't figure it out.
 Works only on pipeline_small.txt
-
-
-
 
 
 For all solutions, I have assumed that groups of tasks have to be executed in order 
